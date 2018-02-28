@@ -82,7 +82,7 @@
     (fn [{{[_ _ response] :event} :coeffects :as ctx}]
       (assoc-in ctx [:effects :db :response] response))))
 
-(def remote-remote-response-interceptor
+(def remove-remote-response-interceptor
   (->before-interceptor
     (fn [ctx]
       (assoc-in ctx [:effects :db :response] nil))))
@@ -112,7 +112,7 @@
    remove-remote-failure-interceptor
    remove-remote-success-interceptor
    remove-validation-failure-interceptor
-   remote-remote-response-interceptor
+   remove-remote-response-interceptor
    (validate-todo-interceptor
      :success
      [(remote-store-interceptor
