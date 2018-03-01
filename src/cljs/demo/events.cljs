@@ -35,7 +35,7 @@
       (assoc-in ctx [:effects :db] db))))
 
 (defn reg-event-chain [id & interceptors]
-  (re-frame/reg-event-ctx id (vec interceptors) identity))
+  (re-frame/reg-event-ctx id (vec (cons begin-chain-interceptor interceptors)) identity))
 
 ;=============== FX ===============
 
@@ -127,17 +127,15 @@
 
 (reg-event-chain
   ::db/create-todo
-  begin-chain-interceptor
   remove-remote-failure-interceptor
   remove-remote-success-interceptor
   remove-validation-failure-interceptor
   remove-remote-response-interceptor
-  db-store-interceptor
   (if-interceptor
     valid-todo?
     (try-interceptor
       add-remote-store-fx
-      add-remote-success-interceptor
+      [db-store-interceptor add-remote-success-interceptor]
       add-remote-failure-interceptor
       db-store-response-interceptor)
     add-validation-failure-interceptor))
