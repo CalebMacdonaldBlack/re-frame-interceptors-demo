@@ -14,6 +14,31 @@
   (fn [_ _]
     db/default-db))
 
+(defn ->vec [x]
+  (flatten [x]))
+
+(defn if-interceptor
+  ([pred] (if-interceptor pred nil nil))
+  ([pred success] (if-interceptor pred success nil))
+  ([pred success failure]
+   (->before-interceptor
+     (fn [ctx]
+       (-> ctx
+           (update :queue (partial concat (if (pred ctx) (->vec success) (->vec failure))))
+           (update :queue vec))))))
+
+(defn try-interceptor
+  ([ctx-modifier] (try-interceptor ctx-modifier nil nil nil))
+  ([ctx-modifier success] (try-interceptor ctx-modifier success nil nil))
+  ([ctx-modifier success failure] (try-interceptor ctx-modifier success failure nil))
+  ([ctx-modifier success failure finally]
+   (->before-interceptor
+     (fn [{{event :event} :coeffects :as ctx}]
+       (ctx-modifier
+         ctx
+         [::db/chain event (concat (->vec success) (->vec finally))]
+         [::db/chain event (concat (->vec failure) (->vec finally))])))))
+
 ;=============== Chain ===============
 
 (def chain
@@ -50,7 +75,7 @@
 
 (def remove-remote-success-interceptor
   (->before-interceptor
-    #(assoc-in % [:effects :db :remote-success] false)))
+    #(assoc-in % [:effects :db :remote-success] false))) ;;BL
 
 (def remove-remote-failure-interceptor
   (->before-interceptor
@@ -86,31 +111,6 @@
   (->before-interceptor
     (fn [ctx]
       (assoc-in ctx [:effects :db :response] nil))))
-
-(defn ->vec [x]
-  (flatten [x]))
-
-(defn if-interceptor
-  ([pred] (if-interceptor pred nil nil))
-  ([pred success] (if-interceptor pred success nil))
-  ([pred success failure]
-   (->before-interceptor
-     (fn [ctx]
-       (-> ctx
-           (update :queue (partial concat (if (pred ctx) (->vec success) (->vec failure))))
-           (update :queue vec))))))
-
-(defn try-interceptor
-  ([ctx-modifier] (try-interceptor ctx-modifier nil nil nil))
-  ([ctx-modifier success] (try-interceptor ctx-modifier success nil nil))
-  ([ctx-modifier success failure] (try-interceptor ctx-modifier success failure nil))
-  ([ctx-modifier success failure finally]
-   (->before-interceptor
-     (fn [{{event :event} :coeffects :as ctx}]
-       (ctx-modifier
-         ctx
-         [::db/chain event (concat (->vec success) (->vec finally))]
-         [::db/chain event (concat (->vec failure) (->vec finally))])))))
 
 (defn valid-todo?
   [{{[_ todo] :event} :coeffects}]
