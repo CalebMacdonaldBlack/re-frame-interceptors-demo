@@ -9,9 +9,6 @@
    :before fn
    :after  identity})
 
-(defn- valid-todo? [todo]
-  (> (count todo) 10))
-
 (re-frame/reg-event-db
   ::db/initialize-db
   (fn [_ _]
@@ -87,24 +84,45 @@
     (fn [ctx]
       (assoc-in ctx [:effects :db :response] nil))))
 
-(defn- validate-todo-interceptor
-  [& {:keys [:success :failure]}]
-  (->before-interceptor
-    (fn [{{[_ todo] :event} :coeffects :as ctx}]
-      (-> ctx
-          (update :queue concat (if (valid-todo? todo) success failure))
-          (update :queue vec)))))
+(defn if-interceptor
+  ([pred] (if-interceptor pred nil nil))
+  ([pred success] (if-interceptor pred success nil))
+  ([pred success failure]
+   (->before-interceptor
+     (fn [ctx]
+       (-> ctx
+           (update :queue (partial concat (if (pred ctx) success failure)))
+           (update :queue vec))))))
 
-(defn- remote-store-interceptor
-  [& {:keys [:success :failure :finally]}]
-  (->before-interceptor
-    (fn [{{event :event} :coeffects :as ctx}]
-      (assoc-in ctx [:effects ::db/remote-store]
-                {:method     :post
-                 :url        "http://example.com/todo"
-                 :todo       (second event)
-                 :on-success [::db/chain event (concat success finally)]
-                 :on-failure [::db/chain event (concat failure finally)]}))))
+(defn try-interceptor
+  ([ctx-modifier] (try-interceptor ctx-modifier nil nil nil))
+  ([ctx-modifier success] (try-interceptor ctx-modifier success nil nil))
+  ([ctx-modifier success failure] (try-interceptor ctx-modifier success failure nil))
+  ([ctx-modifier success failure finally]
+   (->before-interceptor
+     (fn [{{event :event} :coeffects :as ctx}]
+       (ctx-modifier
+         ctx
+         [::db/chain event (concat success finally)]
+         [::db/chain event (concat failure finally)])))))
+
+(defn valid-todo?
+  [{{[_ todo] :event} :coeffects}]
+  (> (count todo) 10))
+;
+;(def if-not-x-interceptor
+;  (->conditional-interceptor
+;    (fn [{{{:keys [:todo]} :db} :effects}]
+;      (not (re-find #"x" todo)))))
+
+(defn add-remote-store-fx
+  [{{event :event} :coeffects :as ctx} on-success on-failure]
+  (assoc-in ctx [:effects ::db/remote-store]
+            {:method     :post
+             :url        "http://example.com/todo"
+             :todo       (second event)
+             :on-success on-success
+             :on-failure on-failure}))
 
 (re-frame/reg-event-ctx
   ::db/create-todo
@@ -113,16 +131,13 @@
    remove-remote-success-interceptor
    remove-validation-failure-interceptor
    remove-remote-response-interceptor
-   (validate-todo-interceptor
-     :success
-     [(remote-store-interceptor
-        :success
-        [db-store-interceptor
-         add-remote-success-interceptor]
-        :failure
-        [add-remote-failure-interceptor]
-        :finally
-        [db-store-response-interceptor])]
-     :failure
-     [add-validation-failure-interceptor])]
+   db-store-interceptor
+   [(if-interceptor
+      valid-todo?
+      [(try-interceptor
+         add-remote-store-fx
+         [add-remote-success-interceptor]
+         [add-remote-failure-interceptor]
+         [db-store-response-interceptor])]
+      [add-validation-failure-interceptor])]]
   identity)
