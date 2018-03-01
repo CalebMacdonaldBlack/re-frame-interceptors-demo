@@ -34,6 +34,9 @@
     (fn [{{:keys [:db]} :coeffects :as ctx}]
       (assoc-in ctx [:effects :db] db))))
 
+(defn reg-event-chain [id & interceptors]
+  (re-frame/reg-event-ctx id (vec interceptors) identity))
+
 ;=============== FX ===============
 
 (re-frame/reg-fx
@@ -84,6 +87,9 @@
     (fn [ctx]
       (assoc-in ctx [:effects :db :response] nil))))
 
+(defn ->vec [x]
+  (flatten [x]))
+
 (defn if-interceptor
   ([pred] (if-interceptor pred nil nil))
   ([pred success] (if-interceptor pred success nil))
@@ -91,7 +97,7 @@
    (->before-interceptor
      (fn [ctx]
        (-> ctx
-           (update :queue (partial concat (if (pred ctx) success failure)))
+           (update :queue (partial concat (if (pred ctx) (->vec success) (->vec failure))))
            (update :queue vec))))))
 
 (defn try-interceptor
@@ -103,17 +109,12 @@
      (fn [{{event :event} :coeffects :as ctx}]
        (ctx-modifier
          ctx
-         [::db/chain event (concat success finally)]
-         [::db/chain event (concat failure finally)])))))
+         [::db/chain event (concat (->vec success) (->vec finally))]
+         [::db/chain event (concat (->vec failure) (->vec finally))])))))
 
 (defn valid-todo?
   [{{[_ todo] :event} :coeffects}]
   (> (count todo) 10))
-;
-;(def if-not-x-interceptor
-;  (->conditional-interceptor
-;    (fn [{{{:keys [:todo]} :db} :effects}]
-;      (not (re-find #"x" todo)))))
 
 (defn add-remote-store-fx
   [{{event :event} :coeffects :as ctx} on-success on-failure]
@@ -124,20 +125,19 @@
              :on-success on-success
              :on-failure on-failure}))
 
-(re-frame/reg-event-ctx
+(reg-event-chain
   ::db/create-todo
-  [begin-chain-interceptor
-   remove-remote-failure-interceptor
-   remove-remote-success-interceptor
-   remove-validation-failure-interceptor
-   remove-remote-response-interceptor
-   db-store-interceptor
-   [(if-interceptor
-      valid-todo?
-      [(try-interceptor
-         add-remote-store-fx
-         [add-remote-success-interceptor]
-         [add-remote-failure-interceptor]
-         [db-store-response-interceptor])]
-      [add-validation-failure-interceptor])]]
-  identity)
+  begin-chain-interceptor
+  remove-remote-failure-interceptor
+  remove-remote-success-interceptor
+  remove-validation-failure-interceptor
+  remove-remote-response-interceptor
+  db-store-interceptor
+  (if-interceptor
+    valid-todo?
+    (try-interceptor
+      add-remote-store-fx
+      add-remote-success-interceptor
+      add-remote-failure-interceptor
+      db-store-response-interceptor)
+    add-validation-failure-interceptor))
