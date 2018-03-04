@@ -4,7 +4,7 @@
     [demo.db :as db]))
 
 (re-frame/reg-sub
- ::name
+ ::db/name
  (fn [db]
    (:name db)))
 

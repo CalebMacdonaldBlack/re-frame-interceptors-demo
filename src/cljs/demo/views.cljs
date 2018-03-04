@@ -8,8 +8,10 @@
   (let [remote-success (re-frame/subscribe [::db/remote-success])
         remote-failure (re-frame/subscribe [::db/remote-failure])
         validation-failure (re-frame/subscribe [::db/validation-failure])
-        remote-response (re-frame/subscribe [::db/remote-response])]
+        remote-response (re-frame/subscribe [::db/remote-response])
+        name (re-frame/subscribe [::db/name])]
     [:div
+     [:h4 @name]
      [:input {:on-change #(re-frame/dispatch [::db/create-todo (.-value (.-target %))])}]
      (when @remote-success
        [:p {:style {:color "green"}} "Remote success!"])

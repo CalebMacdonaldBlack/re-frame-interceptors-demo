@@ -1,4 +1,4 @@
 (ns demo.db)
 
 (def default-db
-  {:name "re-frame"})
+  {:name "I am to persist in db always"})
