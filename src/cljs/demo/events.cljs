@@ -21,7 +21,7 @@
   ([pred success] (chain-if pred success nil))
   ([pred success failure]
    (fn [ctx]
-     ((apply comp (reverse (if (pred ctx) (->vec success) (->vec failure)))) ctx))))
+     ((apply comp (reverse (->vec (if (pred ctx) success failure)))) ctx))))
 
 (defn chain-fx
   ([fx-handler] (chain-fx fx-handler nil nil nil))
@@ -111,7 +111,8 @@
      valid-todo?
      (chain-fx
        add-remote-store-fx
-       [db-store add-remote-success]
+       [db-store
+        add-remote-success]
        add-remote-failure
        db-store-response)
      add-validation-failure)])
